@@ -24,9 +24,17 @@ profile.cov
 go.work
 go.work.sum
 
-# env file
-.env
-
 # Editor/IDE
+.vscode/
 # .idea/
-# .vscode/
+.claude/settings.local.json
+
+# credentials and cached data
+secrets/
+*.env
+creds.json
+state.json
+players_nfl.json
+
+# macOS
+.DS_Store
