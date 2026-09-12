@@ -1,0 +1,55 @@
+id: no-trophies
+name: No Trophies For Losers
+platform: yahoo
+league_id: "915006"
+team_id: "8"
+owner: hector
+season: 2026
+
+format:
+  teams: 10
+  divisions: 0
+  fractional_points: true
+  negative_points: true
+
+roster:
+  starters: [QB, WR, WR, RB, RB, TE, W/R/T, K, DEF]
+  bench: 6
+  ir: 2
+
+scoring:
+  passing: {yards_per_point: 25, td: 4, interception: -1, pick_six_thrown: -2, completion_40plus: 2, two_point: 2}
+  rushing: {yards_per_point: 10, td: 6, two_point: 2}
+  receiving: {reception: 0.5, yards_per_point: 10, td: 6, two_point: 2}
+  misc: {fumble_lost: -2, return_td: 6}
+  kicking: {fg_0_19: 3, fg_20_29: 3, fg_30_39: 3, fg_40_49: 4, fg_50_plus: 5, pat_made: 1}
+  defense:
+    sack: 1
+    interception: 2
+    fumble_recovery: 2
+    touchdown: 6
+    safety: 2
+    block_kick: 2
+    return_td: 6
+    extra_point_returned: 2
+    points_allowed: {"0": 10, "1-6": 7, "7-13": 4, "14-20": 1, "21-27": 0, "28-34": -1, "35+": -4}
+
+waivers:
+  type: rolling_priority
+  claim_period_days: 2
+  weekly_run: tuesday_gametime
+  lineup_lock: individual_at_gametime
+
+trades:
+  review: league_vote
+  votes_to_veto: 5
+  reject_window_days: 2
+  pick_trading: false
+
+deadlines:
+  trade_end: 2026-11-28
+  playoff_weeks: [16, 17]
+  playoff_teams: 4
+  reseeding: true
+
+posture: win_now

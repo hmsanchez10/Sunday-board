@@ -35,6 +35,8 @@ secrets/
 creds.json
 state.json
 players_nfl.json
+idmap.csv
+unmatched.json
 
 # macOS
 .DS_Store

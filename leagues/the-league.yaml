@@ -1,0 +1,62 @@
+id: the-league
+name: The League
+platform: espn
+league_id: "258236"
+team_name: McBride's Mom
+owner: hector
+season: 2026
+
+format:
+  teams: 12
+  league_format: league_manager
+  regular_season_matchups: 14
+  matchup_tiebreaker: most_bench_points
+  lineup_protection: false
+
+roster:
+  size: 15
+  starters: [QB, RB, RB, WR, WR, TE, FLEX, D/ST, K]
+  bench: 6
+  ir: 1
+  position_maximums: {QB: 4, RB: 8, WR: 8, TE: 3, "D/ST": 3, K: 3}
+
+scoring:
+  passing: {yards_per_point: 25, td: 4, interception: -2, two_point: 2}
+  rushing: {yards_per_point: 10, td: 6, two_point: 2}
+  receiving: {reception: 0.5, yards_per_point: 10, td: 6, two_point: 2}
+  misc: {fumble_lost: -2, fumble_recovered_td: 6, return_td: 6}
+  kicking: {fg_0_39: 3, fg_40_49: 4, fg_50_59: 5, fg_60_plus: 5, pat_made: 1, pat_missed: -1, fg_missed: -1}
+  defense:
+    sack: 1
+    interception: 2
+    fumble_recovery: 2
+    safety: 2
+    block_kick: 2
+    any_return_td: 6
+    points_allowed: {"0": 10, "1-6": 7, "7-13": 4, "14-17": 1, "18-21": 0, "22-27": -1, "28-34": -4, "35-45": -7, "46+": -10}
+
+waivers:
+  type: priority_reset_weekly
+  order_rule: inverse_standings
+  claim_period_days: 2
+  lineup_lock: individual_at_gametime
+
+trades:
+  trade_end: 2026-11-27T01:00:00-07:00
+  review_days: 2
+  veto: lm_only
+  pick_trading: true
+
+deadlines:
+  playoff_weeks: [15, 16, 17]
+  playoff_teams: 6
+  reseeding: false
+  consolation_ladder: true
+
+keepers:
+  espn_feature_2026: false
+  espn_feature_2027: true
+  keepers_per_team_2027: 1
+  lock: one_hour_before_draft
+
+posture: win_now

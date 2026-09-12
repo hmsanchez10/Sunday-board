@@ -1,0 +1,48 @@
+id: blackout-dynasty
+name: Blackout Dynasty
+platform: sleeper
+league_id: "1386046474390872064"
+owner: hector
+season: 2026
+league_type: dynasty
+
+format:
+  teams: 12
+  superflex: true
+
+roster:
+  starters: [QB, RB, RB, WR, WR, TE, FLEX, FLEX, FLEX, SUPER_FLEX]
+  bench: 15
+  ir: 1
+  taxi_slots: 1
+  taxi_years: 1
+  taxi_allow_vets: false
+  taxi_deadline_week: 4
+  ir_eligibility: ir_status_only
+
+scoring:
+  passing: {yards_per_point: 25, td: 4, interception: -1, two_point: 2}
+  rushing: {yards_per_point: 10, td: 6, two_point: 2}
+  receiving: {reception: 1.0, yards_per_point: 10, td: 6, two_point: 2}
+  misc: {fumble_lost: -2, fumble_recovered: 2, fumble_recovered_td: 6}
+  # No first-down scoring and no 40+ yard bonus exist in this league.
+  # K and DEF scoring keys exist as Sleeper defaults but no K/DEF slot exists.
+
+waivers:
+  type: faab
+  budget: 200
+  min_bid: 0
+  daily: true
+  clear_days: 2
+
+trades:
+  pick_trading: true
+  review_days: 0
+  veto_votes_needed: 6
+
+deadlines:
+  trade_deadline_week: 11
+  playoff_week_start: 15
+  playoff_teams: 6
+
+posture: contend_stay_young
