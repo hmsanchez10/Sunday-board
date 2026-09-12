@@ -1,14 +1,18 @@
 // Package creds is the local-file implementation of ledger.CredStore.
 //
-// The file is JSON keyed by owner, then platform, then whatever that platform
-// needs:
+// The file is JSON. The full shape is keyed by owner, then platform, then
+// whatever that platform needs:
 //
 //	{
 //	  "hector": {
-//	    "espn":  {"swid": "{...}", "espn_s2": "..."},
+//	    "espn":  {"espn_s2": "...", "SWID": "{...}"},
 //	    "yahoo": {"client_id": "...", "client_secret": "...", "refresh_token": "..."}
 //	  }
 //	}
+//
+// A single-owner file may omit the owner level and key on platform directly:
+//
+//	{"espn": {"espn_s2": "...", "SWID": "{...}"}}
 //
 // Sleeper's API is public, so no entry is needed for it and none is read.
 package creds
@@ -49,17 +53,25 @@ func (s *FileCredStore) CredsFor(owner ledger.Owner, p ledger.Platform) (ledger.
 		return nil, fmt.Errorf("creds: %w", err)
 	}
 
-	var file map[ledger.Owner]map[ledger.Platform]map[string]string
-	if err := json.Unmarshal(raw, &file); err != nil {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
 		return nil, fmt.Errorf("creds: %s: %w", s.Path, err)
 	}
 
-	byPlatform, ok := file[owner]
-	if !ok {
-		return nil, fmt.Errorf("creds: no entry for owner %q in %s", owner, s.Path)
+	var entry map[string]string
+	switch {
+	case top[string(owner)] != nil:
+		var byPlatform map[ledger.Platform]map[string]string
+		if err := json.Unmarshal(top[string(owner)], &byPlatform); err != nil {
+			return nil, fmt.Errorf("creds: %s: owner %q: %w", s.Path, owner, err)
+		}
+		entry = byPlatform[p]
+	case top[string(p)] != nil:
+		if err := json.Unmarshal(top[string(p)], &entry); err != nil {
+			return nil, fmt.Errorf("creds: %s: %s: %w", s.Path, p, err)
+		}
 	}
-	entry, ok := byPlatform[p]
-	if !ok {
+	if entry == nil {
 		return nil, fmt.Errorf("creds: no %s entry for owner %q in %s", p, owner, s.Path)
 	}
 

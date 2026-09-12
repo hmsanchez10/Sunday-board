@@ -57,6 +57,7 @@ const (
 	ResolvedViaCrosswalk = "crosswalk" // DynastyProcess crosswalk row keyed on the Sleeper id
 	ResolvedViaSleeper   = "sleeper"   // Sleeper's own espn_id/yahoo_id
 	ResolvedViaName      = "name"      // crosswalk row matched on normalized name + position + team
+	ResolvedViaTeam      = "team"      // team defense; platform ids derive from the team code
 	ResolvedViaUnmatched = "unmatched" // no ESPN or Yahoo id found by any path
 )
 

@@ -33,6 +33,21 @@ NA,444,555,NA,Jacoby Jones,WR,FA,x
 NA,666,NA,00-1,Sam Kicker,PK,GBP,x
 `
 
+func TestESPNTeamDefenseID(t *testing.T) {
+	if id, ok := ESPNTeamDefenseID("PIT"); !ok || id != "-16023" {
+		t.Errorf("PIT -> %q %v", id, ok)
+	}
+	if id, ok := ESPNTeamDefenseID("KCC"); !ok || id != "-16012" {
+		t.Errorf("KCC (MFL code) -> %q %v", id, ok)
+	}
+	if _, ok := ESPNTeamDefenseID("XYZ"); ok {
+		t.Error("unknown team should miss")
+	}
+	if TeamForESPNProTeamID(30) != "JAX" || TeamForESPNProTeamID(0) != "" {
+		t.Error("proTeamId mapping")
+	}
+}
+
 func TestParse(t *testing.T) {
 	m, err := Parse(strings.NewReader(sample))
 	if err != nil {

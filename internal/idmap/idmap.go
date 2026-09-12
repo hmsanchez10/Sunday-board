@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -49,6 +50,7 @@ type Row struct {
 type Map struct {
 	bySleeper map[string]Row
 	byName    map[string][]Row
+	byESPN    map[string][]Row
 
 	Info cache.Info
 	Rows int // rows parsed, including rows with no sleeper_id
@@ -115,7 +117,7 @@ func Parse(r io.Reader) (*Map, error) {
 		return v
 	}
 
-	m := &Map{bySleeper: map[string]Row{}, byName: map[string][]Row{}}
+	m := &Map{bySleeper: map[string]Row{}, byName: map[string][]Row{}, byESPN: map[string][]Row{}}
 	for {
 		rec, err := cr.Read()
 		if err == io.EOF {
@@ -137,6 +139,9 @@ func Parse(r io.Reader) (*Map, error) {
 		if row.Name != "" {
 			k := NameKey(row.Name, row.Position, row.Team)
 			m.byName[k] = append(m.byName[k], row)
+		}
+		if row.ESPNID != "" {
+			m.byESPN[row.ESPNID] = append(m.byESPN[row.ESPNID], row)
 		}
 		if row.SleeperID == "" {
 			continue
@@ -175,6 +180,33 @@ func (m *Map) ByName(name, position, team string) (Row, bool) {
 		return Row{}, false
 	}
 	return rows[0], true
+}
+
+// ByESPN looks up a row by ESPN player id. It prefers rows that carry a
+// sleeper_id; if several rows carry different sleeper_ids the crosswalk is
+// contradicting itself and the lookup is a miss.
+func (m *Map) ByESPN(espnID string) (Row, bool) {
+	rows := m.byESPN[espnID]
+	if len(rows) == 0 {
+		return Row{}, false
+	}
+	var best Row
+	found := false
+	for _, r := range rows {
+		if r.SleeperID == "" {
+			continue
+		}
+		if found && r.SleeperID != best.SleeperID {
+			return Row{}, false
+		}
+		if !found || score(r) > score(best) {
+			best, found = r, true
+		}
+	}
+	if found {
+		return best, true
+	}
+	return rows[0], len(rows) == 1
 }
 
 // Len is the number of distinct sleeper_ids indexed.
@@ -222,6 +254,37 @@ func NormalizeTeam(s string) string {
 		return t
 	}
 	return s
+}
+
+// espnProTeams maps ESPN proTeamId to the abbreviation Sleeper uses.
+var espnProTeams = map[int]string{
+	1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL", 7: "DEN", 8: "DET",
+	9: "GB", 10: "TEN", 11: "IND", 12: "KC", 13: "LV", 14: "LAR", 15: "MIA", 16: "MIN",
+	17: "NE", 18: "NO", 19: "NYG", 20: "NYJ", 21: "PHI", 22: "ARI", 23: "PIT", 24: "LAC",
+	25: "SF", 26: "SEA", 27: "TB", 28: "WAS", 29: "CAR", 30: "JAX", 33: "BAL", 34: "HOU",
+}
+
+var espnProTeamIDs = func() map[string]int {
+	m := make(map[string]int, len(espnProTeams))
+	for id, abbr := range espnProTeams {
+		m[abbr] = id
+	}
+	return m
+}()
+
+// TeamForESPNProTeamID maps ESPN's proTeamId to Sleeper's team code; "" for
+// free agents or unknown ids.
+func TeamForESPNProTeamID(id int) string { return espnProTeams[id] }
+
+// ESPNTeamDefenseID returns the ESPN player id of a team's D/ST, which ESPN
+// derives as -16000 minus the proTeamId (Steelers: -16023). No crosswalk
+// carries defenses, so this is the join for them.
+func ESPNTeamDefenseID(team string) (string, bool) {
+	id, ok := espnProTeamIDs[NormalizeTeam(team)]
+	if !ok {
+		return "", false
+	}
+	return strconv.Itoa(-16000 - id), true
 }
 
 // NormalizePosition maps crosswalk position codes to Sleeper's.

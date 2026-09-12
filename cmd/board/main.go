@@ -14,6 +14,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/hmsanchez10/Sunday-board/internal/adapters/espn"
 	"github.com/hmsanchez10/Sunday-board/internal/adapters/sleeper"
 	"github.com/hmsanchez10/Sunday-board/internal/cache"
 	"github.com/hmsanchez10/Sunday-board/internal/config"
@@ -74,9 +75,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	logf("players: %s; dump-wide resolution crosswalk %d, sleeper %d, name %d, unmatched %d", table,
+	logf("players: %s; dump-wide resolution crosswalk %d, sleeper %d, name %d, team %d, unmatched %d", table,
 		table.Resolved[ledger.ResolvedViaCrosswalk], table.Resolved[ledger.ResolvedViaSleeper],
-		table.Resolved[ledger.ResolvedViaName], table.Resolved[ledger.ResolvedViaUnmatched])
+		table.Resolved[ledger.ResolvedViaName], table.Resolved[ledger.ResolvedViaTeam], table.Resolved[ledger.ResolvedViaUnmatched])
 	if table.Info.Stale {
 		logf("warning: player refetch failed, using stale cache: %v", table.Info.StaleErr)
 	}
@@ -91,9 +92,14 @@ func run() error {
 		Holdings:    map[ledger.PlayerID][]ledger.Holding{},
 	}
 
+	// extra holds ledger records an adapter built for players it could not
+	// join to a Sleeper id; they are keyed "<platform>:<id>" and stay on the
+	// roster so nothing is dropped.
+	extra := map[ledger.PlayerID]ledger.Player{}
+
 	var failures []error
 	for _, l := range leagues {
-		adapter := adapterFor(l, *sleeperUser)
+		adapter := adapterFor(l, *sleeperUser, table)
 		if adapter == nil {
 			logf("%s (%s): skipped, no adapter for platform %q yet", l.ID, l.Name, l.Platform)
 			continue
@@ -110,10 +116,17 @@ func run() error {
 			continue
 		}
 		state.Leagues = append(state.Leagues, ls)
+		if u, ok := adapter.(interface {
+			Unjoined() map[ledger.PlayerID]ledger.Player
+		}); ok {
+			for k, v := range u.Unjoined() {
+				extra[k] = v
+			}
+		}
 		logf("%s (%s): team %s, record %s, %d rostered, waivers %s", l.ID, l.Name, ls.TeamID, ls.Record, len(ls.Roster), describeWaivers(ls.Waivers))
 	}
 
-	index(&state, table)
+	index(&state, table, extra)
 
 	if err := writeJSON(*outPath, state); err != nil {
 		return err
@@ -137,24 +150,29 @@ func run() error {
 // adapterFor returns a fresh adapter for one league, or nil if the platform
 // has no adapter yet. Per-league construction is what lets slot names come
 // from that league's own config.
-func adapterFor(l config.League, sleeperUser string) ledger.Adapter {
+func adapterFor(l config.League, sleeperUser string, table *players.Store) ledger.Adapter {
 	switch l.Platform {
 	case ledger.PlatformSleeper:
 		return sleeper.New(sleeperUser, l.Roster.Starters)
+	case ledger.PlatformESPN:
+		return espn.New(table, l.Season, l.Roster.Starters)
 	default:
 		return nil
 	}
 }
 
 // index fills State.Players and State.Holdings from State.Leagues.
-func index(state *ledger.State, table *players.Store) {
+func index(state *ledger.State, table *players.Store, extra map[ledger.PlayerID]ledger.Player) {
 	for _, ls := range state.Leagues {
 		for _, e := range ls.Roster {
 			if _, seen := state.Players[e.Player]; !seen {
 				p, ok := table.Lookup(e.Player)
 				if !ok {
+					p, ok = extra[e.Player]
+				}
+				if !ok {
 					logf("warning: %s: player %s not in Sleeper dump", ls.LeagueID, e.Player)
-					p = ledger.Player{ID: e.Player}
+					p = ledger.Player{ID: e.Player, ResolvedVia: ledger.ResolvedViaUnmatched}
 				}
 				state.Players[e.Player] = p
 			}
@@ -175,8 +193,9 @@ func index(state *ledger.State, table *players.Store) {
 
 // Unmatched is one held player with no ESPN or Yahoo id by any path.
 type Unmatched struct {
-	SleeperID ledger.PlayerID `json:"sleeper_id"`
+	SleeperID ledger.PlayerID `json:"sleeper_id"` // "espn:<id>" when the player exists only on ESPN
 	Name      string          `json:"name"`
+	ESPNID    string          `json:"espn_id,omitempty"`
 	Position  string          `json:"position"`
 	Team      string          `json:"team"`
 	Leagues   []string        `json:"leagues"`
@@ -204,16 +223,16 @@ func report(state *ledger.State) []Unmatched {
 			noYahoo++
 		}
 		if p.ResolvedVia == ledger.ResolvedViaUnmatched || p.ResolvedVia == "" {
-			u := Unmatched{SleeperID: id, Name: p.Name, Position: p.Position, Team: p.Team, Leagues: []string{}}
+			u := Unmatched{SleeperID: id, Name: p.Name, Position: p.Position, Team: p.Team, ESPNID: p.ESPNID, Leagues: []string{}}
 			for _, h := range state.Holdings[id] {
 				u.Leagues = append(u.Leagues, h.LeagueID)
 			}
 			un = append(un, u)
 		}
 	}
-	logf("id resolution (%d held players): crosswalk %d, sleeper %d, name %d, unmatched %d; still missing espn_id %d, yahoo_id %d",
+	logf("id resolution (%d held players): crosswalk %d, sleeper %d, name %d, team %d, unmatched %d; still missing espn_id %d, yahoo_id %d",
 		len(ids), counts[ledger.ResolvedViaCrosswalk], counts[ledger.ResolvedViaSleeper], counts[ledger.ResolvedViaName],
-		counts[ledger.ResolvedViaUnmatched], noESPN, noYahoo)
+		counts[ledger.ResolvedViaTeam], counts[ledger.ResolvedViaUnmatched], noESPN, noYahoo)
 	return un
 }
 

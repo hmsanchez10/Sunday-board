@@ -52,4 +52,43 @@ func TestResolveOrder(t *testing.T) {
 	if s.Resolved[ledger.ResolvedViaUnmatched] != 2 || s.Resolved[ledger.ResolvedViaCrosswalk] != 1 {
 		t.Errorf("counts: %v", s.Resolved)
 	}
+
+	// Reverse join: crosswalk row first, then the resolved table.
+	if id, ok := s.SleeperIDForESPN("100"); !ok || id != "1" {
+		t.Errorf("ESPN 100 -> %q %v, want 1", id, ok)
+	}
+	if id, ok := s.SleeperIDForESPN("333"); ok {
+		t.Errorf("ESPN 333 is a yahoo id, got %q", id)
+	}
+	if id, ok := s.SleeperIDForESPN("200"); !ok || id != "2" {
+		t.Errorf("ESPN 200 (sleeper's own) -> %q %v, want 2", id, ok)
+	}
+	if id, ok := s.SleeperIDForESPN("300"); !ok || id != "4" {
+		t.Errorf("ESPN 300 (name path) -> %q %v, want 4", id, ok)
+	}
+	if _, ok := s.SleeperIDForESPN("nope"); ok {
+		t.Error("unknown espn id should miss")
+	}
+}
+
+func TestTeamDefense(t *testing.T) {
+	s := build(map[string]rawPlayer{
+		"PIT": {PlayerID: "PIT", FirstName: "Pittsburgh", LastName: "Steelers", Position: "DEF", Team: "PIT"},
+		"1":   {PlayerID: "1", FullName: "Not A Defense", Position: "RB", Team: "KC"},
+	}, nil)
+	if id, ok := s.TeamDefense("PIT"); !ok || id != "PIT" {
+		t.Errorf("PIT -> %q %v", id, ok)
+	}
+	if p, _ := s.Lookup("PIT"); p.ESPNID != "-16023" || p.ResolvedVia != ledger.ResolvedViaTeam {
+		t.Errorf("DEF should resolve via team with a derived espn id: %+v", p)
+	}
+	if id, ok := s.SleeperIDForESPN("-16023"); !ok || id != "PIT" {
+		t.Errorf("ESPN D/ST id -16023 -> %q %v, want PIT", id, ok)
+	}
+	if _, ok := s.TeamDefense("KC"); ok {
+		t.Error("KC has no DEF record here")
+	}
+	if p, _ := s.Lookup("PIT"); p.Name != "Pittsburgh Steelers" {
+		t.Errorf("DEF name: %q", p.Name)
+	}
 }

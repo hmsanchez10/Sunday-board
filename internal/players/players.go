@@ -7,6 +7,9 @@
 //  2. Sleeper's own espn_id/yahoo_id when the crosswalk has no usable row
 //  3. a crosswalk row matched on normalized name + position + team
 //
+// Team defenses are the exception: no crosswalk carries them, so their ESPN
+// id is derived from the team code (path "team").
+//
 // Whatever path wins, any id still blank is filled from the other sources.
 // A player with no ESPN and no Yahoo id after all three is "unmatched"; it
 // stays in the table so nothing is silently dropped.
@@ -43,8 +46,10 @@ type Options struct {
 
 // Store is the loaded, resolved player table.
 type Store struct {
-	byID map[ledger.PlayerID]ledger.Player
-	Info cache.Info
+	byID   map[ledger.PlayerID]ledger.Player
+	byESPN map[string]ledger.PlayerID
+	idmap  *idmap.Map
+	Info   cache.Info
 	// Resolved counts every player in the dump by ResolvedVia.
 	Resolved map[string]int
 }
@@ -91,6 +96,34 @@ func (s *Store) Lookup(id ledger.PlayerID) (ledger.Player, bool) {
 
 // Len is the number of players in the table.
 func (s *Store) Len() int { return len(s.byID) }
+
+// SleeperIDForESPN is the reverse join used by the ESPN adapter. The
+// crosswalk's own espn_id -> sleeper_id row wins; otherwise the resolved
+// table is searched, which also covers Sleeper's own espn_id and name matches.
+func (s *Store) SleeperIDForESPN(espnID string) (ledger.PlayerID, bool) {
+	if espnID == "" {
+		return "", false
+	}
+	if s.idmap != nil {
+		if r, ok := s.idmap.ByESPN(espnID); ok && r.SleeperID != "" {
+			if _, in := s.byID[ledger.PlayerID(r.SleeperID)]; in {
+				return ledger.PlayerID(r.SleeperID), true
+			}
+		}
+	}
+	id, ok := s.byESPN[espnID]
+	return id, ok
+}
+
+// TeamDefense returns the Sleeper id for a team defense, which Sleeper keys
+// on the team abbreviation ("PIT"). Defenses have no espn_id anywhere.
+func (s *Store) TeamDefense(team string) (ledger.PlayerID, bool) {
+	p, ok := s.byID[ledger.PlayerID(team)]
+	if !ok || p.Position != "DEF" {
+		return "", false
+	}
+	return p.ID, true
+}
 
 // String is a short summary for logs.
 func (s *Store) String() string {
@@ -141,6 +174,8 @@ type rawPlayer struct {
 func build(dump map[string]rawPlayer, m *idmap.Map) *Store {
 	s := &Store{
 		byID:     make(map[ledger.PlayerID]ledger.Player, len(dump)),
+		byESPN:   map[string]ledger.PlayerID{},
+		idmap:    m,
 		Resolved: map[string]int{},
 	}
 	for key, rp := range dump {
@@ -168,8 +203,33 @@ func build(dump map[string]rawPlayer, m *idmap.Map) *Store {
 		resolve(&p, string(rp.ESPNID), string(rp.YahooID), m)
 		s.Resolved[p.ResolvedVia]++
 		s.byID[p.ID] = p
+		if p.ESPNID != "" {
+			if prev, dup := s.byESPN[p.ESPNID]; !dup || prefer(p, s.byID[prev]) {
+				s.byESPN[p.ESPNID] = p.ID
+			}
+		}
 	}
 	return s
+}
+
+var viaRank = map[string]int{
+	ledger.ResolvedViaCrosswalk: 0,
+	ledger.ResolvedViaTeam:      0,
+	ledger.ResolvedViaSleeper:   1,
+	ledger.ResolvedViaName:      2,
+}
+
+// prefer decides which of two Sleeper records sharing an espn_id owns the
+// reverse index: the stronger resolution path, then the one on a team, then
+// the lower id for determinism.
+func prefer(a, b ledger.Player) bool {
+	if viaRank[a.ResolvedVia] != viaRank[b.ResolvedVia] {
+		return viaRank[a.ResolvedVia] < viaRank[b.ResolvedVia]
+	}
+	if (a.Team != "") != (b.Team != "") {
+		return a.Team != ""
+	}
+	return a.ID < b.ID
 }
 
 // resolve fills ESPNID, YahooID, GSISID and ResolvedVia. See the package doc
@@ -187,6 +247,12 @@ func resolve(p *ledger.Player, sleeperESPN, sleeperYahoo string, m *idmap.Map) {
 	}
 
 	switch {
+	case p.Position == "DEF":
+		p.ResolvedVia = ledger.ResolvedViaUnmatched
+		if id, ok := idmap.ESPNTeamDefenseID(p.Team); ok {
+			p.ESPNID = id
+			p.ResolvedVia = ledger.ResolvedViaTeam
+		}
 	case haveRow && hasIDs(row.ESPNID, row.YahooID):
 		p.ESPNID, p.YahooID = row.ESPNID, row.YahooID
 		p.ResolvedVia = ledger.ResolvedViaCrosswalk
